@@ -1,4 +1,5 @@
-﻿using Microsoft.VisualBasic;
+﻿using ImGuiNET;
+using Microsoft.VisualBasic;
 using OpenTK.Graphics.OpenGL4;
 using OpenTK.Mathematics;
 using OpenTK.Windowing.Common;
@@ -9,6 +10,14 @@ using System.Runtime.InteropServices;
 
 namespace DH2323_Project
 {
+    struct PointLight
+    {
+        public Vector3 Position;
+        public float padding0;
+        public Vector3 Color;
+        public float padding1;
+    }
+
     internal class Program : GameWindow
     {
         static void Main(string[] args)
@@ -39,9 +48,23 @@ namespace DH2323_Project
 
         public Program(GameWindowSettings gameWindowSettings, NativeWindowSettings nativeWindowSettings) : base(gameWindowSettings, nativeWindowSettings)
         {
+            _keyboardState = new ToggledKeyboardState(this);
+            _mouseState = new ToggledMouseState(this);
         }
 
-        DebugProc DebugCallback;
+        ImGuiController ImguiController;
+
+        private ToggledKeyboardState _keyboardState;
+        private ToggledMouseState _mouseState;
+
+        new ToggledKeyboardState KeyboardState => _keyboardState;
+        new ToggledMouseState MouseState => _mouseState;
+
+        MappedBuffer<PointLight> PointLights;
+
+        Framebuffer HDRFramebuffer;
+
+        ShaderProgram HDRToLDRShader;
 
         ShaderProgram BasicShader;
         Mesh Mesh;
@@ -63,10 +86,28 @@ namespace DH2323_Project
             GL.CullFace(CullFaceMode.Back);
             GL.Enable(EnableCap.CullFace);
 
+            PointLights = MappedBuffer<PointLight>.CreateMappedBuffer("Point Lights", 10, BufferStorageFlags.MapPersistentBit | BufferStorageFlags.MapWriteBit, BufferAccessMask.MapPersistentBit | BufferAccessMask.MapWriteBit | BufferAccessMask.MapFlushExplicitBit);
+            Random rand = new Random();
+            for (int i = 0; i < PointLights.Size; i++)
+            {
+                float x = MathHelper.MapRange(rand.NextSingle(), 0, 1, -100, 100);
+                float y = MathHelper.MapRange(rand.NextSingle(), 0, 1,   0, 10);
+                float z = MathHelper.MapRange(rand.NextSingle(), 0, 1, -10, 10);
+
+                PointLights[i].Position = (x, y, z);
+
+                Color4 color = Color4.FromHsv((rand.NextSingle(), 1, 1, 1));
+                PointLights[i].Color = new Vector3(color.R, color.G, color.B) * 200.0f;
+            }
+            PointLights.Flush();
+
+            HDRFramebuffer = new Framebuffer("HDR", Size.X, Size.Y, ColorFormat.RGBA16F, DepthFormat.Depth24Stencil8);
 
             Camera = new Camera("Camera", 90, 0.1f, 1000f, Color4.Coral);
 
-            BasicShader = new ShaderProgram("Basic Shader", "Shaders/Basic.vert", "Shaders/Basic.frag");
+            HDRToLDRShader = new ShaderProgram("HDR to LDR", "Shaders/FullscreenTri.vert", "Shaders/HDRToLDR.frag");
+
+            BasicShader = new ShaderProgram("Basic Shader", "Shaders/Basic.vert", "Shaders/Lighting.frag");
             var meshData = ModelLoader.LoadObjModel("Sponza/sponza.obj");
             
             //Mesh = new Mesh("TestModel", ModelLoader.LoadObjModel("TestModel.obj"));
@@ -95,6 +136,8 @@ namespace DH2323_Project
 
             Transform = new Transform(Mesh.Name);
             Transform.LocalScale *= 0.1f;
+
+            ImguiController = new ImGuiController(Size.X, Size.Y);
         }
 
         protected override void OnRenderFrame(FrameEventArgs args)
@@ -107,11 +150,32 @@ namespace DH2323_Project
                 return;
             }
 
-            Screen.NewFrame();
+            if (KeyboardState.IsKeyPressed(Keys.F11))
+            {
+                if (WindowState == WindowState.Fullscreen)
+                {
+                    WindowState = WindowState.Normal;
+                }
+                else
+                {
+                    WindowState = WindowState.Fullscreen;
+                }
+            }
 
             float deltaTime = (float)args.Time;
 
+            Screen.NewFrame();
+
+            ImguiController.Update(this, deltaTime);
+            var io = ImGui.GetIO();
+            KeyboardState.InputEnabled = io.WantCaptureKeyboard == false;
+            MouseState.InputEnabled = io.WantCaptureMouse == false;
+
+            ShowUI(deltaTime);
+
             UpdateCamera(Camera, deltaTime);
+
+            GL.BindFramebuffer(FramebufferTarget.Framebuffer, HDRFramebuffer.GLFramebuffer);
 
             GL.ClearColor(Camera.ClearColor);
             GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit | ClearBufferMask.StencilBufferBit);
@@ -127,6 +191,8 @@ namespace DH2323_Project
             GL.UniformMatrix4(BasicShader.VPLocation, true, ref VP);
             GL.UniformMatrix3(BasicShader.NormalMatrixLocation, true, ref normal);
 
+            GL.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, 0, PointLights.Buffer);
+
             foreach (var submesh in Mesh.Submeshes)
             {
                 GL.BindTextureUnit(0, submesh.Material.Albedo?.GLTexture ?? 0);
@@ -134,7 +200,27 @@ namespace DH2323_Project
                 GL.DrawElements(PrimitiveType.Triangles, submesh.IndexCount, DrawElementsType.UnsignedInt, submesh.StartIndex * sizeof(int));
             }
 
+            GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
+            GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
+
+            GL.UseProgram(HDRToLDRShader.Program);
+            GL.BindTextureUnit(0, HDRFramebuffer.ColorTexture);
+
+            GL.DrawArrays(PrimitiveType.Triangles, 0, 3);
+
+            ImguiController.Render();
+
             SwapBuffers();
+        }
+
+        private void ShowUI(float deltaTime)
+        {
+            if (ImGui.Begin("Controls"))
+            {
+
+                ImGui.Text($"Frame time: {(deltaTime * 1000):0.0000}ms");
+            }
+            ImGui.End();
         }
 
         protected override void OnResize(ResizeEventArgs e)
@@ -143,6 +229,22 @@ namespace DH2323_Project
             Screen.UpdateScreenSize(e.Size);
 
             GL.Viewport(0, 0, e.Width, e.Height);
+
+            ImguiController.WindowResized(e.Width, e.Height);
+        }
+
+        protected override void OnTextInput(TextInputEventArgs e)
+        {
+            base.OnTextInput(e);
+
+            ImguiController.PressChar((char)e.Unicode);
+        }
+
+        protected override void OnMouseWheel(MouseWheelEventArgs e)
+        {
+            base.OnMouseWheel(e);
+
+            ImguiController.MouseScroll(e.Offset);
         }
 
         public static float CameraSpeed = 20;
@@ -156,7 +258,7 @@ namespace DH2323_Project
             UpdateCameraMovement(camera, KeyboardState, MouseState, deltaTime);
             UpdateCameraDirection(camera, MouseState, deltaTime);
 
-            static void UpdateCameraMovement(Camera camera, KeyboardState keyboard, MouseState mouse, float deltaTime)
+            static void UpdateCameraMovement(Camera camera, ToggledKeyboardState keyboard, ToggledMouseState mouse, float deltaTime)
             {
                 {
                     Vector3 direction = Vector3.Zero;
@@ -217,7 +319,7 @@ namespace DH2323_Project
                 }
             }
 
-            static void UpdateCameraDirection(Camera camera, MouseState mouse, float deltaTime)
+            static void UpdateCameraDirection(Camera camera, ToggledMouseState mouse, float deltaTime)
             {
                 if (mouse.IsButtonDown(MouseButton.Right))
                 {
@@ -281,6 +383,94 @@ namespace DH2323_Project
                         break;
                 }
             }
+        }
+    }
+
+    internal class ToggledKeyboardState
+    {
+        public bool InputEnabled = true;
+        public GameWindow Window;
+
+        public ToggledKeyboardState(GameWindow window)
+        {
+            Window = window;
+        }
+
+        public bool this[Keys key]
+        {
+            get => IsKeyDown(key);
+        }
+
+        public bool IsKeyDown(Keys key)
+        {
+            if (InputEnabled) return Window.KeyboardState.IsKeyDown(key);
+            else return false;
+        }
+
+        public bool WasKeyDown(Keys key)
+        {
+            if (InputEnabled) return Window.KeyboardState.WasKeyDown(key);
+            else return false;
+        }
+
+        public bool IsKeyPressed(Keys key)
+        {
+            if (InputEnabled) return Window.KeyboardState.IsKeyPressed(key);
+            else return false;
+        }
+
+        public bool IsKeyReleased(Keys key)
+        {
+            if (InputEnabled) return Window.KeyboardState.IsKeyReleased(key);
+            else return false;
+        }
+    }
+
+    internal class ToggledMouseState
+    {
+        public bool InputEnabled = true;
+        public GameWindow Window;
+
+        public ToggledMouseState(GameWindow window)
+        {
+            Window = window;
+        }
+
+        public Vector2 Position => Window.MouseState.Position;
+
+        public Vector2 PreviousPosition => Window.MouseState.PreviousPosition;
+
+        public Vector2 Delta => Window.MouseState.Delta;
+
+        public Vector2 Scroll => InputEnabled ? Window.MouseState.Scroll : Vector2.Zero;
+
+        public Vector2 PreviousScroll => InputEnabled ? Window.MouseState.PreviousScroll : Vector2.Zero;
+
+        public Vector2 ScrollDelta => InputEnabled ? Window.MouseState.ScrollDelta : Vector2.Zero;
+
+        public bool this[MouseButton button]
+        {
+            get => InputEnabled ? Window.MouseState[button] : false;
+        }
+
+        public bool IsButtonDown(MouseButton button)
+        {
+            return InputEnabled ? Window.MouseState.IsButtonDown(button) : false;
+        }
+
+        public bool WasButtonDown(MouseButton button)
+        {
+            return InputEnabled ? Window.MouseState.WasButtonDown(button) : false;
+        }
+
+        public bool IsButtonPressed(MouseButton button)
+        {
+            return InputEnabled ? Window.MouseState.IsButtonPressed(button) : false;
+        }
+
+        public bool IsButtonReleased(MouseButton button)
+        {
+            return InputEnabled ? Window.MouseState.IsButtonReleased(button) : false;
         }
     }
 }

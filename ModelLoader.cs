@@ -184,7 +184,7 @@ namespace DH2323_Project
                 {
                     // g name
 
-                    if (groups.Count > 0 && groups[^1].EndIndex != 0)
+                    if (groups.Count > 0 && groups[^1].EndIndex == 0)
                     {
                         groups[^1].EndIndex = faces.Count - 1;
                     }
@@ -202,7 +202,19 @@ namespace DH2323_Project
                 else if (line.StartsWith("usemtl "))
                 {
                     objects[^1].MaterialName = line["usemtl ".Length..];
+                    groups[^1].MaterialName = line["usemtl ".Length..];
                 }
+            }
+
+            // End the last object and group
+            if (objects.Count > 0 && objects[^1].EndIndex == 0)
+            {
+                objects[^1].EndIndex = faces.Count - 1;
+            }
+
+            if (groups.Count > 0 && groups[^1].EndIndex == 0)
+            {
+                groups[^1].EndIndex = faces.Count - 1;
             }
 
             // Now we have all of the data
@@ -338,9 +350,13 @@ namespace DH2323_Project
         public struct ObjGroup
         {
             public string Name;
+
             public int Object;
+
             public int StartIndex;
             public int EndIndex;
+
+            public string MaterialName;
         }
 
         struct VertexRef : IEquatable<VertexRef>

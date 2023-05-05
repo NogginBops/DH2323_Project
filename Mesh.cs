@@ -2,6 +2,7 @@
 using OpenTK.Mathematics;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -62,20 +63,22 @@ namespace DH2323_Project
                 GL.EnableVertexArrayAttrib(VAO, 2);
             }
 
-            Submeshes = new SubMesh[Objects.Length];
-            for (int i = 0; i < Objects.Length; i++)
+            Submeshes = new SubMesh[Groups.Length];
+            for (int i = 0; i < Groups.Length; i++)
             {
-                var obj = Objects[i];
+                ModelLoader.ObjGroup group = Groups[i];
 
-                Submeshes[i].Name = obj.Name;
+                Submeshes[i].Name = group.Name;
 
-                if (materials.TryGetValue(obj.MaterialName, out Material? material))
+                if (materials.TryGetValue(group.MaterialName, out Material? material))
                 {
                     Submeshes[i].Material = material;
                 }
 
-                Submeshes[i].StartIndex = obj.StartIndex;
-                Submeshes[i].IndexCount = (obj.EndIndex - obj.StartIndex) + 1;
+                Submeshes[i].StartIndex = group.StartIndex;
+                Submeshes[i].IndexCount = (group.EndIndex - group.StartIndex) + 1;
+
+                Debug.Assert(Submeshes[i].IndexCount > 0);
             }
         }
     }

@@ -10,7 +10,10 @@ layout(binding = 0) uniform sampler2D albedo;
 
 void main()
 {
-    out_color = texture(albedo, uv);
+    vec4 albedo = texture(albedo, uv);
+    if (albedo.a < 0.5) discard;
+
+    out_color = vec4(albedo.rgb, 1);
     //out_color = vec4(uv, 0, 1.0);
     //out_color = vec4(abs(normalize(worldNormal)), 1.0);
 }

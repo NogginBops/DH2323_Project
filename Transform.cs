@@ -19,7 +19,7 @@ namespace DH2323_Project
 
         public Matrix4 LocalToParent;
 
-        public Matrix4 LocalToWorld => CalculateLocalToWorld();
+        public Matrix4 LocalToWorld;
 
         public Vector3 LocalPosition
         {
@@ -28,6 +28,7 @@ namespace DH2323_Project
             {
                 position = value;
                 LocalToParent = CalculateLocalToParent();
+                LocalToWorld = CalculateLocalToWorld();
             }
         }
         public Quaternion LocalRotation 
@@ -37,6 +38,7 @@ namespace DH2323_Project
             {
                 rotation = value;
                 LocalToParent = CalculateLocalToParent();
+                LocalToWorld = CalculateLocalToWorld();
             }
         }
         public Vector3 LocalScale 
@@ -46,8 +48,11 @@ namespace DH2323_Project
             {
                 scale = value;
                 LocalToParent = CalculateLocalToParent();
+                LocalToWorld = CalculateLocalToWorld();
             }
         }
+
+        public Vector3 WorldPosition => LocalToWorld.Row3.Xyz;
 
         public Vector3 Forward => Vector3.TransformVector(-Vector3.UnitZ, LocalToWorld);
         public Vector3 Right => Vector3.TransformVector(Vector3.UnitX, LocalToWorld);
@@ -74,6 +79,7 @@ namespace DH2323_Project
             this.scale = scale;
 
             LocalToParent = CalculateLocalToParent();
+            LocalToWorld = CalculateLocalToWorld();
         }
 
         public Matrix4 CalculateLocalToWorld()
@@ -81,11 +87,9 @@ namespace DH2323_Project
             Matrix4 matrix = LocalToParent;
 
             Transform? parent = Parent;
-            while (parent != null)
+            if (parent != null)
             {
-                Matrix4 parentMatrix = parent.LocalToParent;
-
-                Matrix4.Mult(in matrix, in parentMatrix, out matrix);
+                Matrix4.Mult(in matrix, in parent.LocalToWorld, out matrix);
             }
 
             return matrix;

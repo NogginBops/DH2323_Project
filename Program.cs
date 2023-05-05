@@ -13,7 +13,7 @@ namespace DH2323_Project
     struct PointLight
     {
         public Vector3 Position;
-        public float padding0;
+        public float InvRadius;
         public Vector3 Color;
         public float padding1;
     }
@@ -72,6 +72,10 @@ namespace DH2323_Project
 
         Camera Camera;
 
+        float metallic = 0.2f;
+        float reflecance = 0.2f;
+        float roughness = 0.1f;
+
         protected override void OnLoad()
         {
             base.OnLoad();
@@ -91,13 +95,16 @@ namespace DH2323_Project
             for (int i = 0; i < PointLights.Size; i++)
             {
                 float x = MathHelper.MapRange(rand.NextSingle(), 0, 1, -100, 100);
-                float y = MathHelper.MapRange(rand.NextSingle(), 0, 1,   0, 10);
-                float z = MathHelper.MapRange(rand.NextSingle(), 0, 1, -10, 10);
+                float y = MathHelper.MapRange(rand.NextSingle(), 0, 1,  0.1f, 30);
+                float z = MathHelper.MapRange(rand.NextSingle(), 0, 1, -15, 15);
 
                 PointLights[i].Position = (x, y, z);
 
+                PointLights[i].InvRadius = 1 / 1000f;
+
                 Color4 color = Color4.FromHsv((rand.NextSingle(), 1, 1, 1));
-                PointLights[i].Color = new Vector3(color.R, color.G, color.B) * 200.0f;
+                PointLights[i].Color = new Vector3(color.R, color.G, color.B) * 400.0f;
+                //PointLights[i].Color = Vector3.One * 400.0f;
             }
             PointLights.Flush();
 
@@ -187,6 +194,11 @@ namespace DH2323_Project
             Matrix3 normal = Matrix3.Invert(Matrix3.Transpose(new Matrix3(model)));
             Camera.CalcViewProjection(out Matrix4 VP);
 
+            GL.Uniform3(GL.GetUniformLocation(BasicShader.Program, "cameraPosition"), Camera.Transform.WorldPosition);
+            GL.Uniform1(1, metallic);
+            GL.Uniform1(2, reflecance);
+            GL.Uniform1(3, roughness);
+
             GL.UniformMatrix4(BasicShader.ModelMatrixLocation, true, ref model);
             GL.UniformMatrix4(BasicShader.VPLocation, true, ref VP);
             GL.UniformMatrix3(BasicShader.NormalMatrixLocation, true, ref normal);
@@ -217,8 +229,11 @@ namespace DH2323_Project
         {
             if (ImGui.Begin("Controls"))
             {
-
                 ImGui.Text($"Frame time: {(deltaTime * 1000):0.0000}ms");
+
+                ImGui.DragFloat("Metallic", ref metallic, 0.01f, 0.0f, 1.0f);
+                ImGui.DragFloat("Reflecance", ref reflecance, 0.01f, 0.0f, 1.0f);
+                ImGui.DragFloat("Roughness", ref roughness, 0.01f, 0.045f, 1.0f);
             }
             ImGui.End();
         }

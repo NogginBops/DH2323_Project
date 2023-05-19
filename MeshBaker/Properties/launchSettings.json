@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "MeshBaker": {
+      "commandName": "Project",
+      "commandLineArgs": "../../../../DH2323_Project/Assets/Sponza/Sponza.obj"
+    }
+  }
+}

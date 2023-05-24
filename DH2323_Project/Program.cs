@@ -6,6 +6,7 @@ using OpenTK.Windowing.Common;
 using OpenTK.Windowing.Desktop;
 using OpenTK.Windowing.GraphicsLibraryFramework;
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -30,6 +31,8 @@ namespace DH2323_Project
         static void Main(string[] args)
         {
             Directory.SetCurrentDirectory("../../../Assets");
+            CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+            CultureInfo.CurrentUICulture = CultureInfo.InvariantCulture;
 
             GameWindowSettings gws = new GameWindowSettings()
             {
@@ -513,7 +516,7 @@ namespace DH2323_Project
 
             static void UpdateCameraDirection(Camera camera, ToggledMouseState mouse, float deltaTime)
             {
-                if (mouse.IsButtonDown(MouseButton.Right))
+                if (mouse.IsButtonDown(MouseButton.Left))
                 {
                     var delta = mouse.Delta;
 
